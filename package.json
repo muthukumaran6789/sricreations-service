@@ -1,0 +1,22 @@
+{
+  "name": "sri-creations-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express API for the Sri Creations gift and fancy items store",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "set-admin": "node scripts/set-admin.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.5.0",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sri Creations Service API",
+    "version": "1.0.0",
+    "description": "Store API. Firebase ID tokens are verified by the service; admin operations also require the admin custom claim."
+  },
+  "servers": [{ "url": "/" }],
+  "tags": [
+    { "name": "Health" },
+    { "name": "Catalog" },
+    { "name": "Authentication" },
+    { "name": "Store" },
+    { "name": "Admin" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "responses": { "200": { "description": "Service is healthy" } }
+      }
+    },
+    "/api-docs": {
+      "get": { "tags": ["Health"], "summary": "Swagger UI", "responses": { "200": { "description": "Interactive API documentation" } } }
+    },
+    "/openapi.json": {
+      "get": { "tags": ["Health"], "summary": "OpenAPI specification", "responses": { "200": { "description": "OpenAPI JSON" } } }
+    },
+    "/api/categories": {
+      "get": { "tags": ["Catalog"], "summary": "List active categories", "responses": { "200": { "description": "Category list", "content": { "application/json": { "schema": { "type": "object", "properties": { "categories": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } } }, "required": ["categories"] } } } } } }
+    },
+    "/api/products": {
+      "get": {
+        "tags": ["Catalog"],
+        "summary": "List active products",
+        "parameters": [
+          { "name": "categoryId", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 100 } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Product page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProductPage" } } } } }
+      }
+    },
+    "/api/auth/session": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Synchronize login and record login event",
+        "description": "Call after Firebase client sign-in. X-Client-Platform is self-reported metadata.",
+        "security": [{ "FirebaseBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ClientPlatform" }],
+        "responses": { "200": { "description": "Profile, including the admin claim for UI display", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SessionResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/auth/me": {
+      "get": { "tags": ["Authentication"], "summary": "Get current profile", "security": [{ "FirebaseBearer": [] }], "responses": { "200": { "description": "Profile", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProfileResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
+      "patch": { "tags": ["Authentication"], "summary": "Update display name", "security": [{ "FirebaseBearer": [] }], "requestBody": { "$ref": "#/components/requestBodies/DisplayName" }, "responses": { "200": { "description": "Updated profile", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProfileResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/api/cart": {
+      "get": { "tags": ["Store"], "summary": "Get current cart", "security": [{ "FirebaseBearer": [] }], "responses": { "200": { "description": "Cart", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CartResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
+      "put": { "tags": ["Store"], "summary": "Replace current cart", "security": [{ "FirebaseBearer": [] }], "requestBody": { "$ref": "#/components/requestBodies/Cart" }, "responses": { "200": { "description": "Saved cart", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CartResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" } } },
+      "post": { "tags": ["Store"], "summary": "Add product quantity to cart", "description": "Adds the requested quantity to an existing cart line, or creates a new line. Validates active product and available stock.", "security": [{ "FirebaseBearer": [] }], "requestBody": { "$ref": "#/components/requestBodies/AddCartItem" }, "responses": { "200": { "description": "Updated cart", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CartResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Requested quantity exceeds available stock" } } }
+    },
+    "/api/checkout": {
+      "post": { "tags": ["Store"], "summary": "Create Razorpay QR checkout", "description": "Creates a pending order and fixed-amount single-use UPI QR. Payment is confirmed only by a verified Razorpay webhook. Retry the same checkout with the same Idempotency-Key.", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 8, "maxLength": 100 } }], "requestBody": { "$ref": "#/components/requestBodies/Checkout" }, "responses": { "201": { "description": "Order and payment QR created", "content": { "application/json": { "schema": { "type": "object", "properties": { "orderId": { "type": "string" }, "status": { "type": "string", "example": "pending_payment" }, "amountMinor": { "type": "integer" }, "currency": { "type": "string" }, "payment": { "type": "object", "properties": { "id": { "type": "string" }, "provider": { "type": "string", "example": "razorpay" }, "status": { "type": "string" }, "qrCodeId": { "type": "string" }, "qrImageUrl": { "type": "string", "format": "uri" }, "expiresAt": { "type": "string", "format": "date-time" } }, "required": ["id", "provider", "status", "qrCodeId", "qrImageUrl", "expiresAt"] } }, "required": ["orderId", "status", "amountMinor", "currency", "payment"] } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "409": { "description": "Cart or stock conflict" }, "503": { "description": "Razorpay credentials or QR activation unavailable" } } }
+    },
+    "/api/orders": {
+      "get": { "tags": ["Store"], "summary": "List current user's orders", "security": [{ "FirebaseBearer": [] }], "responses": { "200": { "description": "Order page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrderPage" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } } }
+    },
+    "/api/orders/{id}": {
+      "get": { "tags": ["Store"], "summary": "Get current user's order", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "responses": { "200": { "description": "Order", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/payments/razorpay/webhook": {
+      "post": { "tags": ["Store"], "summary": "Razorpay QR webhook", "description": "Server-to-server endpoint. Configure the Razorpay webhook with the same secret as RAZORPAY_WEBHOOK_SECRET and subscribe to qr_code.credited. Requests are verified against the raw body signature.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "event": { "type": "string", "example": "qr_code.credited" }, "payload": { "type": "object", "additionalProperties": true } }, "required": ["event"] } } } }, "responses": { "200": { "description": "Event accepted" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "description": "Invalid webhook signature" }, "503": { "description": "Payment verification temporarily unavailable; Razorpay should retry" } } }
+    },
+    "/api/admin/categories": {
+      "get": { "tags": ["Admin"], "summary": "List categories", "security": [{ "FirebaseBearer": [] }], "responses": { "200": { "description": "Category page", "content": { "application/json": { "schema": { "type": "object", "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } }, "nextCursor": { "type": ["string", "null"] } }, "required": ["items", "nextCursor"] } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "post": { "tags": ["Admin"], "summary": "Create category", "security": [{ "FirebaseBearer": [] }], "requestBody": { "$ref": "#/components/requestBodies/Category" }, "responses": { "201": { "description": "Created category", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Category" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/api/admin/categories/{id}": {
+      "patch": { "tags": ["Admin"], "summary": "Update category", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "requestBody": { "$ref": "#/components/requestBodies/CategoryPatch" }, "responses": { "200": { "description": "Updated category" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "delete": { "tags": ["Admin"], "summary": "Archive category", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "responses": { "204": { "description": "Archived" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/api/admin/products": {
+      "get": { "tags": ["Admin"], "summary": "List products", "security": [{ "FirebaseBearer": [] }], "responses": { "200": { "description": "Product page", "content": { "application/json": { "schema": { "type": "object", "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } }, "nextCursor": { "type": ["string", "null"] } }, "required": ["items", "nextCursor"] } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "post": { "tags": ["Admin"], "summary": "Create product", "security": [{ "FirebaseBearer": [] }], "requestBody": { "$ref": "#/components/requestBodies/Product" }, "responses": { "201": { "description": "Created product", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Product" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/api/admin/products/{id}": {
+      "patch": { "tags": ["Admin"], "summary": "Update product", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "requestBody": { "$ref": "#/components/requestBodies/ProductPatch" }, "responses": { "200": { "description": "Updated product" }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "delete": { "tags": ["Admin"], "summary": "Archive product", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "responses": { "204": { "description": "Archived" }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/api/admin/products/{id}/stock-adjustments": {
+      "post": { "tags": ["Admin"], "summary": "Adjust stock", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "delta": { "type": "integer", "not": { "const": 0 } }, "reason": { "type": "string" } }, "required": ["delta", "reason"], "additionalProperties": false } } } }, "responses": { "201": { "description": "Adjustment recorded" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "description": "Insufficient available stock" } } }
+    },
+    "/api/admin/orders": {
+      "get": { "tags": ["Admin"], "summary": "List orders", "security": [{ "FirebaseBearer": [] }], "responses": { "200": { "description": "Order page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrderPage" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } } }
+    },
+    "/api/admin/orders/{id}": {
+      "get": { "tags": ["Admin"], "summary": "Get order", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "responses": { "200": { "description": "Order" }, "403": { "$ref": "#/components/responses/Forbidden" } } },
+      "patch": { "tags": ["Admin"], "summary": "Update order fulfilment status/tracking", "security": [{ "FirebaseBearer": [] }], "parameters": [{ "$ref": "#/components/parameters/DocumentId" }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "trackingNumber": { "type": ["string", "null"] } }, "additionalProperties": false } } } }, "responses": { "200": { "description": "Updated order" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "description": "Invalid status transition" } } }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "FirebaseBearer": { "type": "http", "scheme": "bearer", "bearerFormat": "Firebase ID Token" }
+    },
+    "parameters": {
+      "ClientPlatform": { "name": "X-Client-Platform", "in": "header", "required": false, "schema": { "type": "string", "enum": ["web", "app"] } },
+      "DocumentId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+    },
+    "requestBodies": {
+      "DisplayName": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "displayName": { "type": "string", "maxLength": 100 } }, "required": ["displayName"], "additionalProperties": false } } } },
+      "Cart": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "items": { "type": "array", "items": { "type": "object", "properties": { "productId": { "type": "string" }, "quantity": { "type": "integer", "minimum": 1, "maximum": 99 } }, "required": ["productId", "quantity"] } } }, "required": ["items"] } } } },
+      "AddCartItem": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "productId": { "type": "string" }, "quantity": { "type": "integer", "minimum": 1, "maximum": 99 } }, "required": ["productId", "quantity"], "additionalProperties": false }, "example": { "productId": "product-document-id", "quantity": 1 } } } },
+      "Checkout": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "shippingAddress": { "type": "object", "properties": { "recipientName": { "type": "string" }, "fullName": { "type": "string" }, "phoneNumber": { "type": "string" }, "line1": { "type": "string" }, "addressLine1": { "type": "string" }, "line2": { "type": "string" }, "addressLine2": { "type": "string" }, "city": { "type": "string" }, "state": { "type": "string" }, "postalCode": { "type": "string" }, "countryCode": { "type": "string", "description": "Two-letter ISO code; for example IN." }, "country": { "type": "string", "description": "Country name; India is normalized to IN." } } } }, "required": ["shippingAddress"] }, "example": { "shippingAddress": { "fullName": "A Customer", "phoneNumber": "7299669892", "addressLine1": "6, Main Road", "addressLine2": "", "city": "Chennai", "state": "Tamil Nadu", "postalCode": "611009", "country": "India" } } } } },
+      "Category": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "slug": { "type": "string" }, "description": { "type": "string" }, "imageUrl": { "type": ["string", "null"] }, "active": { "type": "boolean" }, "sortOrder": { "type": "integer" } }, "required": ["name"] } } } },
+      "CategoryPatch": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+      "Product": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "categoryId": { "type": "string" }, "sku": { "type": "string" }, "priceMinor": { "type": "integer", "minimum": 0 }, "currency": { "type": "string", "default": "INR" }, "stockOnHand": { "type": "integer", "minimum": 0 }, "imageUrls": { "type": "array", "items": { "type": "string" } } }, "required": ["name", "categoryId", "sku", "priceMinor", "stockOnHand"] } } } },
+      "ProductPatch": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+    },
+    "schemas": {
+      "Error": { "type": "object", "properties": { "error": { "type": "string" } }, "required": ["error"] },
+      "Product": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "slug": { "type": "string" }, "description": { "type": "string" }, "categoryId": { "type": "string" }, "sku": { "type": "string" }, "imageUrls": { "type": "array", "items": { "type": "string" } }, "priceMinor": { "type": "integer" }, "currency": { "type": "string" }, "stockOnHand": { "type": "integer" }, "stockReserved": { "type": "integer" }, "active": { "type": "boolean" }, "createdAt": {}, "updatedAt": {} }, "additionalProperties": true },
+      "Category": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "slug": { "type": "string" }, "description": { "type": "string" }, "imageUrl": { "type": ["string", "null"] }, "active": { "type": "boolean" }, "sortOrder": { "type": "integer" } }, "additionalProperties": true },
+      "ProductPage": { "type": "object", "properties": { "products": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } }, "nextCursor": { "type": ["string", "null"] } }, "required": ["products", "nextCursor"] },
+      "Order": { "type": "object", "properties": { "id": { "type": "string" }, "userId": { "type": "string" }, "status": { "type": "string" }, "paymentStatus": { "type": "string" }, "items": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "amounts": { "type": "object", "additionalProperties": true }, "shippingAddress": { "type": "object", "additionalProperties": true }, "trackingNumber": { "type": ["string", "null"] } }, "additionalProperties": true },
+      "OrderPage": { "type": "object", "properties": { "orders": { "type": "array", "items": { "$ref": "#/components/schemas/Order" } }, "nextCursor": { "type": ["string", "null"] } }, "required": ["orders", "nextCursor"] },
+      "CartResponse": { "type": "object", "properties": { "cart": { "type": "object", "properties": { "items": { "type": "array", "items": { "type": "object", "properties": { "productId": { "type": "string" }, "quantity": { "type": "integer" } }, "required": ["productId", "quantity"] } } }, "required": ["items"] } }, "required": ["cart"] },
+      "ProfileResponse": { "type": "object", "properties": { "uid": { "type": "string" }, "profile": { "type": "object", "additionalProperties": true } }, "required": ["uid", "profile"] },
+      "SessionResponse": { "type": "object", "properties": { "uid": { "type": "string" }, "profile": { "type": "object", "additionalProperties": true }, "claims": { "type": "object", "properties": { "admin": { "type": "boolean" } }, "required": ["admin"] } }, "required": ["uid", "profile", "claims"] }
+    },
+    "responses": {
+      "Unauthorized": { "description": "Missing or invalid Firebase ID token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "Admin custom claim required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "BadRequest": { "description": "Invalid request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "Resource not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    }
+  }
+}
